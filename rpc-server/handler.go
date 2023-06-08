@@ -45,8 +45,12 @@ func (s *IMServiceImpl) Pull(ctx context.Context, req *rpc.PullRequest) (*rpc.Pu
 		return nil, err
 	}
 
+	limit := int64(req.GetLimit())
+	if limit == 0 {
+		limit = 10 // default limit 10
+	}
 	start := req.GetCursor()
-	end := start + int64(req.GetLimit()) // did not minus 1 on purpose for hasMore check later on
+	end := start + limit // did not minus 1 on purpose for hasMore check later on
 
 	messages, err := rdb.GetMessagesByRoomID(ctx, roomID, start, end, req.GetReverse())
 	if err != nil {
@@ -54,11 +58,11 @@ func (s *IMServiceImpl) Pull(ctx context.Context, req *rpc.PullRequest) (*rpc.Pu
 	}
 
 	respMessages := make([]*rpc.Message, 0)
-	var counter int32 = 0
+	var counter int64 = 0
 	var nextCursor int64 = 0
 	hasMore := false
 	for _, msg := range messages {
-		if counter+1 > req.GetLimit() {
+		if counter+1 > limit {
 			// having extra value here means it has more data
 			hasMore = true
 			nextCursor = end
@@ -103,7 +107,8 @@ func validateSendRequest(req *rpc.SendRequest) error {
 func getRoomID(chat string) (string, error) {
 	var roomID string
 
-	senders := strings.Split(chat, ":")
+	lowercase := strings.ToLower(chat)
+	senders := strings.Split(lowercase, ":")
 	if len(senders) != 2 {
 		err := fmt.Errorf("invalid Chat ID '%s', should be in the format of user1:user2", chat)
 		return "", err
